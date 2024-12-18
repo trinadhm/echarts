@@ -42,6 +42,17 @@ type TextStyle = string | RichTextStyle;
 
 const TOOLTIP_LINE_HEIGHT_CSS = 'line-height:1';
 
+function getTooltipLineHeight(
+    textStyle: TooltipOption['textStyle']
+) {
+    const lineHeight = textStyle.lineHeight;
+    if (lineHeight == null) {
+        return TOOLTIP_LINE_HEIGHT_CSS;
+    }
+    else {
+        return `line-height:${encodeHTML(lineHeight + '')}px`;
+    }
+}
 // TODO: more textStyle option
 function getTooltipTextStyle(
     textStyle: TooltipOption['textStyle'],
@@ -149,7 +160,6 @@ export interface TooltipMarkupNameValueBlock extends TooltipMarkupBlock {
     // If `!markerType`, tooltip marker is not used.
     markerType?: TooltipMarkerType;
     markerColor?: ColorString;
-    opacity?: number;
     name?: string;
     // Also support value is `[121, 555, 94.2]`.
     value?: unknown | unknown[];
@@ -273,6 +283,7 @@ function buildSection(
     const subMarkupText = ctx.renderMode === 'richText'
         ? subMarkupTextList.join(gaps.richText)
         : wrapBlockHTML(
+            toolTipTextStyle,
             subMarkupTextList.join(''),
             noHeader ? topMarginForOuterGap : gaps.html
         );
@@ -283,13 +294,15 @@ function buildSection(
 
     const displayableHeader = makeValueReadable(fragment.header, 'ordinal', ctx.useUTC);
     const {nameStyle} = getTooltipTextStyle(toolTipTextStyle, ctx.renderMode);
+    const tooltipLineHeight = getTooltipLineHeight(toolTipTextStyle);
     if (ctx.renderMode === 'richText') {
         return wrapInlineNameRichText(ctx, displayableHeader, nameStyle as RichTextStyle) + gaps.richText
             + subMarkupText;
     }
     else {
         return wrapBlockHTML(
-            `<div style="${nameStyle};${TOOLTIP_LINE_HEIGHT_CSS};">`
+            toolTipTextStyle,
+            `<div style="${nameStyle};${tooltipLineHeight};">`
                 + encodeHTML(displayableHeader)
                 + '</div>'
                 + subMarkupText,
@@ -326,8 +339,7 @@ function buildNameValue(
         : ctx.markupStyleCreator.makeTooltipMarker(
             fragment.markerType,
             fragment.markerColor || '#333',
-            renderMode,
-            fragment.opacity
+            renderMode
         );
     const readableName = noName
         ? ''
@@ -352,6 +364,7 @@ function buildNameValue(
             ))
         )
         : wrapBlockHTML(
+            toolTipTextStyle,
             (noMarker ? '' : markerStr)
             + (noName ? '' : wrapInlineNameHTML(readableName, !noMarker, nameStyle as string))
             + (noValue ? '' : wrapInlineValueHTML(
@@ -408,12 +421,14 @@ function getGap(gapLevel: number): {
 }
 
 function wrapBlockHTML(
+    textStyle: TooltipOption['textStyle'],
     encodedContent: string,
     topGap: number
 ): string {
     const clearfix = '<div style="clear:both"></div>';
     const marginCSS = `margin: ${topGap}px 0 0`;
-    return `<div style="${marginCSS};${TOOLTIP_LINE_HEIGHT_CSS};">`
+    const tooltipLineHeight = getTooltipLineHeight(textStyle);
+    return `<div style="${marginCSS};${tooltipLineHeight};">`
         + encodedContent + clearfix
         + '</div>';
 }
@@ -478,16 +493,6 @@ export function retrieveVisualColorForTooltipMarker(
     return convertToColorString(color);
 }
 
-export function retrieveVisualOpacityForTooltipMarker(
-    series: SeriesModel,
-    dataIndex: number
-): number {
-    const style = series.getData().getItemVisual(dataIndex, 'style');
-    const opacity = style.opacity;
-    return opacity;
-}
-
-
 export function getPaddingFromTooltipModel(
     model: Model<TooltipOption>,
     renderMode: TooltipRenderMode
@@ -521,8 +526,7 @@ export class TooltipMarkupStyleCreator {
     makeTooltipMarker(
         markerType: TooltipMarkerType,
         colorStr: ColorString,
-        renderMode: TooltipRenderMode,
-        opacity?: number
+        renderMode: TooltipRenderMode
     ): string {
         const markerId = renderMode === 'richText'
             ? this._generateStyleName()
@@ -531,8 +535,7 @@ export class TooltipMarkupStyleCreator {
             color: colorStr,
             type: markerType,
             renderMode,
-            markerId: markerId,
-            opacity: opacity
+            markerId: markerId
         });
         if (isString(marker)) {
             return marker;

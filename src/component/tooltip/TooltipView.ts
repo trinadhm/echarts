@@ -20,7 +20,7 @@ import { bind, each, clone, trim, isString, isFunction, isArray, isObject, exten
 import env from 'zrender/src/core/env';
 import TooltipHTMLContent from './TooltipHTMLContent';
 import TooltipRichContent from './TooltipRichContent';
-import { convertToColorString, formatTpl, TooltipMarker } from '../../util/format';
+import { convertToColorString, encodeHTML, formatTpl, TooltipMarker } from '../../util/format';
 import { parsePercent } from '../../util/number';
 import { Rect } from '../../util/graphic';
 import findPointFromSeries from '../axisPointer/findPointFromSeries';
@@ -463,6 +463,11 @@ class TooltipView extends ComponentView {
             this._showAxisTooltip(dataByCoordSys, e);
         }
         else if (el) {
+            const ecData = getECData(el);
+            if (ecData.ssrType === 'legend') {
+                // Don't trigger tooltip for legend tooltip item
+                return;
+            }
             this._lastDataByCoordSys = null;
 
             let seriesDispatcher: Element;
@@ -573,7 +578,7 @@ class TooltipView extends ComponentView {
                     // Pre-create marker style for makers. Users can assemble richText
                     // text in `formatter` callback and use those markers style.
                     cbParams.marker = markupStyleCreator.makeTooltipMarker(
-                        'item', convertToColorString(cbParams.color), renderMode, cbParams.opacity
+                        'item', convertToColorString(cbParams.color), renderMode
                     );
 
                     const seriesTooltipResult = normalizeTooltipFormatResult(
@@ -719,9 +724,11 @@ class TooltipView extends ComponentView {
         el: ECElement,
         dispatchAction: ExtensionAPI['dispatchAction']
     ) {
+        const isHTMLRenderMode = this._renderMode === 'html';
         const ecData = getECData(el);
         const tooltipConfig = ecData.tooltipConfig;
         let tooltipOpt = tooltipConfig.option || {};
+        let encodeHTMLContent = tooltipOpt.encodeHTMLContent;
         if (isString(tooltipOpt)) {
             const content = tooltipOpt;
             tooltipOpt = {
@@ -729,6 +736,16 @@ class TooltipView extends ComponentView {
                 // Fixed formatter
                 formatter: content
             };
+            // when `tooltipConfig.option` is a string rather than an object,
+            // we can't know if the content needs to be encoded
+            // for the sake of security, encode it by default.
+            encodeHTMLContent = true;
+        }
+
+        if (encodeHTMLContent && isHTMLRenderMode && tooltipOpt.content) {
+            // clone might be unnecessary?
+            tooltipOpt = clone(tooltipOpt);
+            tooltipOpt.content = encodeHTML(tooltipOpt.content);
         }
 
         const tooltipModelCascade = [tooltipOpt] as TooltipModelOptionCascade[];
